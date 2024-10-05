@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 ahash = "0.8.11"
+anyhow = "1.0.89"
 ksni = "0.2.2"
 memoize = "0.4.2"
 resvg = "0.43.0"

@@ -153,9 +153,14 @@ fn get_battery(spawner: &mut Command) -> Battery {
 #[memoize(Capacity:8)]
 fn parse_battery(stdout: Vec<u8>) -> Battery {
     let str = str::from_utf8(stdout.as_slice()).unwrap();
-    let parsed: HeadsetControl = serde_json::from_str(str).unwrap();
-    let battery = parsed.devices.first().unwrap().battery.clone();
-    battery
+    let parsed = serde_json::from_str::<HeadsetControl>(str);
+    match parsed {
+        Ok(parsed) => {
+            let battery = parsed.devices.first().unwrap().battery.clone();
+            battery
+        }
+        Err(e) => panic!("{:?}\n\n\n{:?}", e, str),
+    }
 }
 
 fn map_from_to(
