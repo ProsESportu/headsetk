@@ -1,5 +1,5 @@
 use core::str;
-use std::{process::Command, time::Duration};
+use std::{error::Error, process::Command, rc::Rc, time::Duration};
 
 use ksni::{menu::StandardItem, Icon, Status};
 use memoize::memoize;
@@ -145,22 +145,23 @@ fn rgba_to_argb(rgba_bytes: &[u8]) -> Vec<u8> {
     argb
 }
 
-fn get_battery(spawner: &mut Command) -> Battery {
+fn get_battery(spawner: &mut Command) -> Result<Battery, Rc<dyn Error>> {
     let process = spawner.output().unwrap();
     let stdout = process.stdout;
     parse_battery(stdout)
 }
 #[memoize(Capacity:8)]
-fn parse_battery(stdout: Vec<u8>) -> Battery {
-    let str = str::from_utf8(stdout.as_slice()).unwrap();
-    let parsed = serde_json::from_str::<HeadsetControl>(str);
-    match parsed {
-        Ok(parsed) => {
-            let battery = parsed.devices.first().unwrap().battery.clone();
-            battery
-        }
-        Err(e) => panic!("{:?}\n\n\n{:?}", e, str),
-    }
+fn parse_battery(stdout: Vec<u8>) -> Result<Battery, Rc<dyn Error>> {
+    let str = match str::from_utf8(stdout.as_slice()) {
+        Ok(e) => e,
+        Err(e) => return Err(Rc::new(e)),
+    };
+    let parsed: HeadsetControl = match serde_json::from_str(str) {
+        Ok(e) => e,
+        Err(e) => return Err(Rc::new(e)),
+    };
+    let battery = parsed.devices.first().unwrap().battery.clone();
+    Ok(battery)
 }
 
 fn map_from_to(
@@ -179,7 +180,7 @@ fn main() {
     let mut child = Command::new("headsetcontrol");
     let spawner = child.arg("-o").arg("JSON");
     let service = ksni::TrayService::new(MyTray {
-        battery: get_battery(spawner),
+        battery: get_battery(spawner).unwrap(),
         opts: opt,
     });
     let handle = service.handle();
@@ -187,7 +188,9 @@ fn main() {
     loop {
         std::thread::sleep(Duration::from_millis(500));
         handle.update(|tray: &mut MyTray| {
-            tray.battery = get_battery(spawner);
+            if let Ok(battery) = get_battery(spawner) {
+                tray.battery = battery;
+            }
         })
     }
 }
